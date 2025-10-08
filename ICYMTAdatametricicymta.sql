@@ -41,10 +41,18 @@ ALTER ICEBERG TABLE ICYMTA
    SNOWFLAKE.CORE.ROW_COUNT ON (),                   -- Row count (Volume)
     SNOWFLAKE.CORE.NULL_COUNT ON (PROGRESSSTATUS)    -- Null count
         EXPECTATION my_exp ( VALUE < 5 );
-
+        
 /*
 ******************************************************************************
 * Congrats! You have successfully set up your first DMFs.
 * Navigate to the table data quality page to review DMF results.
 ******************************************************************************
 */
+
+SELECT SNOWFLAKE.CORE.FRESHNESS(
+  SELECT
+      TO_DATE(EXPECTEDDEPARTURETIME)
+  FROM DEMO.DEMO.ICYMTA
+) < 300;
+
+select EXPECTEDDEPARTURETIME  FROM DEMO.DEMO.ICYMTA;
