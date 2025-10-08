@@ -1,0 +1,2 @@
+# SnowflakeWorkspaceFinancial
+workspace
