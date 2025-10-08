@@ -1,0 +1,6 @@
+SELECT
+  *
+FROM
+  "DEMO"."DEMO"."OSSINSIGHTS"
+LIMIT
+  10;
