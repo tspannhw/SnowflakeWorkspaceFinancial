@@ -11,14 +11,11 @@ delete from  demo.demo.icymta;
 describe iceberg table icymta;
 
 
-   select VEHICLEREF as bus, destinationname, expectedarrivaltime, EXPECTEDDEPARTURETIME, stoppointname, bearing,HAVERSINE( TO_DECIMAL(VEHICLELOCATIONLATITUDE), TO_DECIMAL(VEHICLELOCATIONLONGITUDE), 40.3209,	-74.4208 ) as distance, 
+   select VEHICLEREF as bus, destinationname, expectedarrivaltime, EXPECTEDDEPARTURETIME, stoppointname, bearing,
       distancefromstop,SITUATIONSIMPLEREF1 as IncidentDescription, recordedattime, ESTIMATEDPASSENGERCOUNT, ESTIMATEDPASSENGERCAPACITY, arrivalproximitytext,NUMBEROFSTOPSAWAY, TS 
-  from demo.demo.icymta
-  where DISTANCEFROMSTOP > 0
-  order by distance desc, recordedattime desc ;
+
 
   
-
 
 
 -- https://docs.snowflake.com/en/user-guide/data-load-snowpipe-streaming-iceberg 
@@ -51,7 +48,9 @@ alter iceberg table icymta
    ADD COLUMN 
     PROCESSING_STATUS STRING DEFAULT 'PROCESSED';
 
-select * from MTABUSVEHICLEMONITORING;
+select * from
+MTABUSVEHICLEMONITORING
+order by ts desc;
 
 
 create or replace ICEBERG TABLE DEMO.DEMO.ICYMTA (
@@ -136,6 +135,7 @@ WHERE INGESTION_TIME >= DATEADD('HOUR', -1, CURRENT_TIMESTAMP())
 GROUP BY DATE_TRUNC('MINUTE', INGESTION_TIME)
 ORDER BY ingestion_minute DESC;
 
+select * from ICYMTA_STREAM;
 
 select * from V_STREAMING_METRICS;
 
@@ -166,9 +166,6 @@ USE ROLE ACCOUNTADMIN;
 
 -- Step 2: Enable Iceberg tables at account level
 ALTER ACCOUNT SET ENABLE_ICEBERG_TABLES = TRUE;
-
-
-ALTER account dr75630 SET ENABLE_ICEBERG_EXTERNAL_TABLES=TRUE, parameter_comment='SNOW-579103 Enable Iceberg external tables for PrPr';
 
 
   USE ROLE ACCOUNTADMIN;

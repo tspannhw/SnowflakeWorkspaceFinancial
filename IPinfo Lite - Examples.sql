@@ -41,10 +41,11 @@ SELECT DISTINCT
     as_name,
     as_domain
 FROM lite
-WHERE
-    country_code = 'US'         -- Filter for ASes located in the United States
-    AND as_domain like '%datainmotion%'
-LIMIT 10;
+WHERE as_domain like '%broadridge%'
+    or UPPER(as_name) like '%BROADRIDGE%'
+LIMIT 500;
+
+describe table lite;
 
 // Top 10 ASNs (by name) with the highest number of IPv4 address ranges
 /*
