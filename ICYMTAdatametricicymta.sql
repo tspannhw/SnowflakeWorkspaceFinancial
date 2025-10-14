@@ -49,10 +49,108 @@ ALTER ICEBERG TABLE ICYMTA
 ******************************************************************************
 */
 
+CREATE OR REPLACE VIEW LTZMTCA(DATE1_LTZ) AS 
+SELECT TS::TIMESTAMP_LTZ FROM DEMO.DEMO.ICYMTA WHERE TS IS NOT NULL;
+
+
 SELECT SNOWFLAKE.CORE.FRESHNESS(
-  SELECT
-      TO_DATE(EXPECTEDDEPARTURETIME)
+SELECT DATE1_LTZ FROM LTZMTCA) < 300;
+
+  SELECT '2024-01-01 12:00:00'::TIMESTAMP_TZ
   FROM DEMO.DEMO.ICYMTA
-) < 300;
+  
+--  TO_TIMESTAMP_TZ(EXPECTEDDEPARTURETIME, 'YYYYMMDDHH24:MI:SS')::TIMESTAMP_TZ
+-- https://community.snowflake.com/s/article/FRESHNESS-function-gives-error-even-after-type-casting-the-column-with-TIMESTAMP-NTZ-datatype-to-allowed-datatype
+
+select EXPECTEDDEPARTURETIME, TO_TIMESTAMP_TZ(EXPECTEDDEPARTURETIME, 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM') as TimeStampx , VEHICLEREF, DESTINATIONNAME,TO_TIMESTAMP_LTZ(TS) as TimeStamp2
+FROM DEMO.DEMO.ICYMTA
+WHERE EXPECTEDDEPARTURETIME is not null and TRIM(EXPECTEDDEPARTURETIME) != ''
+order by EXPECTEDDEPARTURETIME desc;
 
 select EXPECTEDDEPARTURETIME  FROM DEMO.DEMO.ICYMTA;
+
+SHOW USER FUNCTIONS LIKE 'FRESHNESS';
+-- LTZ, TZ, DATE
+
+
+select SNOWFLAKE.CORE.DATA_METRIC_SCHEDULED_TIME()
+FROM DEMO.DEMO.ICYMTA;
+
+SELECT 
+    TABLE_SCHEMA,
+    TABLE_NAME,
+    COLUMN_NAME,
+    ORDINAL_POSITION,
+    DATA_TYPE,
+    IS_NULLABLE,
+    CHARACTER_MAXIMUM_LENGTH,
+    NUMERIC_PRECISION,
+    NUMERIC_SCALE,
+    COMMENT
+FROM SNOWFLAKE.INFORMATION_SCHEMA.COLUMNS 
+ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION;
+
+
+select 
+EXPECTEDDEPARTURETIME, TO_TIMESTAMP_TZ(EXPECTEDDEPARTURETIME, 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM') as TimeStampx , VEHICLEREF, DESTINATIONNAME,TO_TIMESTAMP_LTZ(TS) as TimeStamp2
+FROM DEMO.DEMO.ICYMTA
+WHERE EXPECTEDDEPARTURETIME is not null and TRIM(EXPECTEDDEPARTURETIME) != ''
+order by EXPECTEDDEPARTURETIME desc;
+
+-- Ingestion
+select vehiclelocationlatitude, vehiclelocationlongitude, destinationref, recordedattime, stoppointname, bearing, destinationname,
+        publishedlinename, arrivalproximitytext, distancefromstop, estimatedpassengercount, ingestion_time, EXPECTEDDEPARTURETIME,
+        VEHICLEREF
+from icymta
+order by ingestion_time desc;
+
+select * from  icymta
+order by ingestion_time desc;
+
+CALL DEMO.DEMO.ASK_BUS_DATA('For this month what is the average estimated passenger count');
+
+CALL DEMO.DEMO.RETURN_MTA_NEARBY('40.741260529', '-73.988929749');
+
+
+    SELECT SNOWFLAKE.CORTEX.COMPLETE(
+        'snowflake-arctic', 
+        CONCAT(
+            'You are an expert SQL assistant. Given the table `DEMO.DEMO.ICYMTA` with the following columns: ',
+            'TS, PUBLISHEDLINENAME, DESTINATIONNAME, VEHICLEREF, ESTIMATEDPASSENGERCOUNT, ESTIMATEDPASSENGERCAPACITY, PROGRESSSTATUS, VEHICLELOCATIONLATITUDE, VEHICLELOCATIONLONGITUDE. ',
+            'Generate a SQL query to answer the following question. Only return the SQL query, with no explanation or other text. Question: ',
+            'For this month what is the average estimated passenger count'
+        )) FROM ICYMTA LIMIT 1;
+
+
+ SELECT AVG(ESTIMATEDPASSENGERCOUNT) FROM DEMO.DEMO.ICYMTA WHERE DATE_PART('month', TS) = DATE_PART('month', GETDATE());
+        
+
+ SELECT          
+      (ST_DISTANCE(ST_MAKEPOINT(VEHICLELOCATIONLATITUDE,VEHICLELOCATIONLONGITUDE),
+                   ST_MAKEPOINT(TRY_TO_NUMBER('40.741260529',13,10),TRY_TO_NUMBER('-73.988929749',13,10)))/1609) as distanceinmiles
+  FROM icymta
+  WHERE DISTANCEFROMSTOP > 0
+  AND VEHICLELOCATIONLATITUDE is not null and VEHICLELOCATIONLONGITUDE is not null
+     LIMIT 10;
+
+
+SELECT VEHICLEREF as bus, destinationname, 
+         expectedarrivaltime,
+         EXPECTEDDEPARTURETIME, stoppointname, bearing,
+         HAVERSINE( VEHICLELOCATIONLATITUDE, VEHICLELOCATIONLONGITUDE, 
+                    TRY_TO_NUMBER('40.741260529',13,10),	
+                    TRY_TO_NUMBER('-73.988929749',13,10)  ) as distance, 
+         
+         (ST_DISTANCE( ST_MAKEPOINT(VEHICLELOCATIONLATITUDE,VEHICLELOCATIONLONGITUDE),
+                       ST_MAKEPOINT(TRY_TO_NUMBER('40.741260529',13,10),
+                                   TRY_TO_NUMBER('-73.988929749',13,10))) / 1609) as distanceinmiles,                  
+         distancefromstop,SITUATIONSIMPLEREF1 as IncidentDescription, recordedattime, ESTIMATEDPASSENGERCOUNT, 
+      ESTIMATEDPASSENGERCAPACITY, arrivalproximitytext,NUMBEROFSTOPSAWAY, TS 
+  FROM icymta
+  WHERE TRY_TO_NUMBER(DISTANCEFROMSTOP,10,1) > 0
+  and distance is not null and VEHICLELOCATIONLATITUDE is not null
+  and VEHICLELOCATIONLONGITUDE is not null
+  ORDER BY distance ASC
+     LIMIT 10;
+     
+    
