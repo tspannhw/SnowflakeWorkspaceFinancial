@@ -31,6 +31,7 @@ FROM
 JOIN
     snowflake.account_usage.query_history q
     ON l.query_id = q.query_id
+WHERE l.source_table like 'DEMO.DEMO.*'
 ORDER BY
     l.query_start_time DESC
 LIMIT 100;

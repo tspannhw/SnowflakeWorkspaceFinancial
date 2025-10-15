@@ -128,9 +128,9 @@ CALL DEMO.DEMO.RETURN_MTA_NEARBY('40.741260529', '-73.988929749');
  SELECT          
       (ST_DISTANCE(ST_MAKEPOINT(VEHICLELOCATIONLATITUDE,VEHICLELOCATIONLONGITUDE),
                    ST_MAKEPOINT(TRY_TO_NUMBER('40.741260529',13,10),TRY_TO_NUMBER('-73.988929749',13,10)))/1609) as distanceinmiles
-  FROM icymta
+  FROM demo.demo.icymta
   WHERE DISTANCEFROMSTOP > 0
-  AND VEHICLELOCATIONLATITUDE is not null and VEHICLELOCATIONLONGITUDE is not null
+  AND VEHICLELOCATIONLATITUDE is not null and VEHICLELOCATIONLONGITUDE is not null AND distanceinmiles IS NOT NULL
      LIMIT 10;
 
 
@@ -153,4 +153,117 @@ SELECT VEHICLEREF as bus, destinationname,
   ORDER BY distance ASC
      LIMIT 10;
      
+
+
+
+
+   SELECT 
+    DATE_TRUNC('HOUR', INGESTION_TIME) AS ingestion_hour,
+    COUNT(*) AS total_records,
     
+    -- Count empty string coordinates
+    COUNT(CASE WHEN VEHICLELOCATIONLATITUDE = '' THEN 1 END) AS empty_latitude_count,
+    COUNT(CASE WHEN VEHICLELOCATIONLONGITUDE = '' THEN 1 END) AS empty_longitude_count,
+    
+    -- Count NULL coordinates  
+    COUNT(CASE WHEN VEHICLELOCATIONLATITUDE IS NULL THEN 1 END) AS null_latitude_count,
+    COUNT(CASE WHEN VEHICLELOCATIONLONGITUDE IS NULL THEN 1 END) AS null_longitude_count,
+    
+    -- Count invalid numeric coordinates
+    COUNT(CASE 
+        WHEN VEHICLELOCATIONLATITUDE != '' AND VEHICLELOCATIONLATITUDE IS NOT NULL 
+             AND TRY_TO_DOUBLE(VEHICLELOCATIONLATITUDE) IS NULL 
+        THEN 1 
+    END) AS invalid_latitude_count,
+    
+    COUNT(CASE 
+        WHEN VEHICLELOCATIONLONGITUDE != '' AND VEHICLELOCATIONLONGITUDE IS NOT NULL 
+             AND TRY_TO_DOUBLE(VEHICLELOCATIONLONGITUDE) IS NULL 
+        THEN 1 
+    END) AS invalid_longitude_count,
+    
+    -- Count valid coordinates
+    COUNT(CASE 
+        WHEN VEHICLELOCATIONLATITUDE != '' AND VEHICLELOCATIONLATITUDE IS NOT NULL
+             AND VEHICLELOCATIONLONGITUDE != '' AND VEHICLELOCATIONLONGITUDE IS NOT NULL
+             AND TRY_TO_DOUBLE(VEHICLELOCATIONLATITUDE) IS NOT NULL
+             AND TRY_TO_DOUBLE(VEHICLELOCATIONLONGITUDE) IS NOT NULL
+        THEN 1 
+    END) AS valid_coordinate_count,
+    
+    -- Calculate quality percentages
+    ROUND(valid_coordinate_count * 100.0 / total_records, 2) AS valid_coord_percentage,
+    ROUND((empty_latitude_count + empty_longitude_count) * 100.0 / (total_records * 2), 2) AS empty_coord_percentage
+    
+FROM DEMO.DEMO.ICYMTA
+WHERE INGESTION_TIME >= DATEADD('DAY', -365, CURRENT_TIMESTAMP())
+GROUP BY DATE_TRUNC('HOUR', INGESTION_TIME)
+ORDER BY ingestion_hour DESC;
+
+
+CREATE OR REPLACE TAG NEWYORK_TRANSIT COMMENT = 'New York Transit Data Real-Time';
+ALTER ICEBERG TABLE DEMO.DEMO.ICYMTA SET TAG NEWYORK_TRANSIT = 'REALWORLD_DATA';
+
+
+
+select 
+user_name,
+client_application_id
+from snowflake.account_usage.sessions
+where true
+and created_on >= dateadd('days', -90, current_date()) --last 90 days, please adjust
+and (
+    client_application_id ilike '%SnowSQL%1.0.%'
+    or client_application_id ilike '%SnowSQL%1.1.%'
+    or client_application_id ilike '%SnowSQL%1.2.%'
+)
+group by 1,2
+order by 1,2;
+
+
+
+SELECT * 
+FROM demo.demo.icymta 
+SAMPLE (25);
+
+SELECT * 
+FROM demo.demo.icymta 
+SAMPLE BERNOULLI (10) SEED (99);
+
+describe semantic view svmta;
+
+
+SELECT * FROM SEMANTIC_VIEW(
+    svmta
+    DIMENSIONS ICYMTA.DESTINATIONNAME
+  )
+  LIMIT 5;
+
+
+  CREATE OR REPLACE SNOWFLAKE.ML.ANOMALY_DETECTION mta_anomaly_detector(
+  INPUT_DATA => SYSTEM$REFERENCE('VIEW', 'DEMO.DEMO.ICYMTA'),
+  SERIES_COLNAME => 'BEARING',
+  TIMESTAMP_COLNAME => 'ts',
+  TARGET_COLNAME => 'daily_bearing',
+  LABEL_COLNAME => 'is_anomaly',
+  CONFIG_OBJECT => {
+    'detection_method': 'ROBUST_SCALER',
+    'contamination': 0.1,
+    'standardize_target': true
+  }
+)
+WITH TAG (
+  environment = 'production',
+  team = 'data_science',
+  model_type = 'anomaly_detection'
+)
+COMMENT = 'Anomaly detection model for identifying unusual daily revenue patterns across pmta';
+
+
+CREATE SNOWFLAKE.ML.ANOMALY_DETECTION simple_anomaly_model(
+  INPUT_DATA => SYSTEM$REFERENCE('TABLE', 'DEMO.DEMO.ICYMTA'),
+  TIMESTAMP_COLNAME => 'ts',
+  TARGET_COLNAME => 'bearing',
+  LABEL_COLNAME => 'DESTINATIONNAME'
+)
+COMMENT = 'Basic anomaly detection for single time series';
